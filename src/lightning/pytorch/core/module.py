@@ -130,6 +130,7 @@ class LightningModule(
         self._example_input_array: Optional[Union[Tensor, Tuple, Dict]] = None
         self._automatic_optimization: bool = True
         self._strict_loading: Optional[bool] = None
+        self._assign_loading: Optional[bool] = None
 
         # attributes used internally
         self._current_fx_name: Optional[str] = None
@@ -305,6 +306,16 @@ class LightningModule(
     @strict_loading.setter
     def strict_loading(self, strict_loading: bool) -> None:
         self._strict_loading = strict_loading
+
+    @property
+    def assign_loading(self) -> bool:
+        """Determines how Lightning loads this model using `.load_state_dict(..., assign=model.assign_loading)`."""
+        # We use None as the default internally to determine whether the user has set a value
+        return self._assign_loading in (True,)
+
+    @assign_loading.setter
+    def assign_loading(self, assign_loading: bool) -> None:
+        self._assign_loading = assign_loading
 
     @property
     def logger(self) -> Optional[Union[Logger, FabricLogger]]:
@@ -1489,6 +1500,7 @@ class LightningModule(
         map_location: _MAP_LOCATION_TYPE = None,
         hparams_file: Optional[_PATH] = None,
         strict: Optional[bool] = None,
+        assign: Optional[bool] = None,
         **kwargs: Any,
     ) -> Self:
         r"""Primary way of loading a model from a checkpoint. When Lightning saves a checkpoint it stores the arguments
@@ -1522,6 +1534,12 @@ class LightningModule(
             strict: Whether to strictly enforce that the keys in :attr:`checkpoint_path` match the keys
                 returned by this module's state dict. Defaults to ``True`` unless ``LightningModule.strict_loading`` is
                 set, in which case it defaults to the value of ``LightningModule.strict_loading``.
+            assign: Whether to assign items in the state dictionary to their corresponding keys in the module instead
+                of copying them inplace into the module's current parameters and buffers.
+                When ``False``, the properties of the tensors in the current module are preserved while when ``True``,
+                the properties of the Tensors in the state dict are preserved. Defaults to ``False`` unless
+                ``LightningModule.assign_loading`` is set, in which case it defaults to the value of
+                ``LightningModule.assign_loading``.
             \**kwargs: Any extra keyword args needed to init the model. Can also be used to override saved
                 hyperparameter values.
 
@@ -1577,6 +1595,7 @@ class LightningModule(
             map_location,
             hparams_file,
             strict,
+            assign,
             **kwargs,
         )
         return cast(Self, loaded)

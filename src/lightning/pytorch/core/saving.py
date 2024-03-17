@@ -56,6 +56,7 @@ def _load_from_checkpoint(
     map_location: _MAP_LOCATION_TYPE = None,
     hparams_file: Optional[_PATH] = None,
     strict: Optional[bool] = None,
+    assign: Optional[bool] = None,
     **kwargs: Any,
 ) -> Union["pl.LightningModule", "pl.LightningDataModule"]:
     map_location = map_location or _default_map_location
@@ -88,7 +89,7 @@ def _load_from_checkpoint(
     if issubclass(cls, pl.LightningDataModule):
         return _load_state(cls, checkpoint, **kwargs)
     if issubclass(cls, pl.LightningModule):
-        model = _load_state(cls, checkpoint, strict=strict, **kwargs)
+        model = _load_state(cls, checkpoint, strict=strict, assign=assign, **kwargs)
         state_dict = checkpoint["state_dict"]
         if not state_dict:
             rank_zero_warn(f"The state dict in {checkpoint_path!r} contains no parameters.")
@@ -118,6 +119,7 @@ def _load_state(
     cls: Union[Type["pl.LightningModule"], Type["pl.LightningDataModule"]],
     checkpoint: Dict[str, Any],
     strict: Optional[bool] = None,
+    assign: Optional[bool] = None,
     **cls_kwargs_new: Any,
 ) -> Union["pl.LightningModule", "pl.LightningDataModule"]:
     cls_spec = inspect.getfullargspec(cls.__init__)
@@ -177,6 +179,13 @@ def _load_state(
             )
         strict = obj.strict_loading if strict is None else strict
 
+        if obj._assign_loading is not None and assign is not None and assign != obj.assign_loading:
+            raise ValueError(
+                f"You set `.load_from_checkpoint(..., assign={assign!r})` which is in conflict with"
+                f" `{cls.__name__}.assign_loading={obj.assign_loading!r}. Please set the same value for both of them."
+            )
+        assign = obj.assign_loading if assign is None else assign
+
         if is_overridden("configure_model", obj):
             obj.configure_model()
 
@@ -184,7 +193,7 @@ def _load_state(
         obj.on_load_checkpoint(checkpoint)
 
     # load the state_dict on the model automatically
-    keys = obj.load_state_dict(checkpoint["state_dict"], strict=strict)
+    keys = obj.load_state_dict(checkpoint["state_dict"], strict=strict, assign=assign)
 
     if not strict:
         if keys.missing_keys:
